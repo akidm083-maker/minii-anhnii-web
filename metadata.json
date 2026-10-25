@@ -1,0 +1,6 @@
+{
+  "name": "Миний Бүтээлүүд & Портфолио",
+  "description": "Монгол хэл дээрх хувийн танилцуулга, бүтээлүүдийн нэгдсэн үзэсгэлэн болон холбоо барих мэдээлэл.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
