@@ -1,11 +1,14 @@
-import { Mail, ArrowUpRight } from 'lucide-react';
+import { LogIn, LogOut } from 'lucide-react';
 import { PERSONAL_INFO } from '../data/works';
+import { useFirebase } from '../context/FirebaseContext';
 
 interface HeaderProps {
   onNavigate: (sectionId: string) => void;
 }
 
 export function Header({ onNavigate }: HeaderProps) {
+  const { user, authReady, authLoading, signInWithGoogle, signOutUser } = useFirebase();
+
   const scrollTo = (id: string) => {
     onNavigate(id);
     const element = document.getElementById(id);
@@ -13,6 +16,8 @@ export function Header({ onNavigate }: HeaderProps) {
       element.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  const shortUserName = user?.displayName?.split(' ')[0] || 'Хэрэглэгч';
 
   return (
     <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-slate-950/80 border-b border-slate-800/80 transition-colors">
@@ -24,32 +29,36 @@ export function Header({ onNavigate }: HeaderProps) {
             e.preventDefault();
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className="text-lg font-bold tracking-tight text-white hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 flex items-center gap-2"
+          className="text-lg font-bold tracking-tight text-white hover:text-amber-400 transition-colors whitespace-nowrap shrink-0"
         >
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
-          <span>{PERSONAL_INFO.name}</span>
-          <span className="text-slate-500 font-normal text-sm hidden sm:inline">· Бүтээлүүд</span>
+          {PERSONAL_INFO.name}
         </a>
 
         {/* Бүс 2: Навигацийн цэсүүд (Нэг мөр, товч) */}
-        <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-300">
+        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-300">
+          <button
+            onClick={() => scrollTo('profile-section')}
+            className="text-amber-400 hover:text-amber-300 font-semibold transition-colors whitespace-nowrap shrink-0"
+          >
+            Миний
+          </button>
           <button
             onClick={() => scrollTo('works-section')}
             className="hover:text-amber-400 transition-colors whitespace-nowrap shrink-0"
           >
-            Миний бүтээлүүд
+            Бүтээлүүд
           </button>
           <button
-            onClick={() => scrollTo('skills-section')}
+            onClick={() => scrollTo('idol-section')}
             className="hover:text-amber-400 transition-colors whitespace-nowrap shrink-0"
           >
-            Ур чадвар
+            Шүтээн
           </button>
           <button
-            onClick={() => scrollTo('about-section')}
+            onClick={() => scrollTo('guestbook-section')}
             className="hover:text-amber-400 transition-colors whitespace-nowrap shrink-0"
           >
-            Миний тухай
+            Зочны дэвтэр
           </button>
           <button
             onClick={() => scrollTo('contact-section')}
@@ -59,16 +68,32 @@ export function Header({ onNavigate }: HeaderProps) {
           </button>
         </nav>
 
-        {/* Бүс 3: Нэг үндсэн үйлдэл (CTA товч) */}
+        {/* Бүс 3: Нэг үндсэн үйлдэл (Google Нэвтрэх / Гарах) */}
         <div className="flex items-center gap-3 shrink-0">
-          <a
-            href={`mailto:${PERSONAL_INFO.email}`}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-400 rounded-lg hover:bg-amber-300 transition-colors whitespace-nowrap shrink-0 shadow-sm shadow-amber-400/10"
-          >
-            <Mail className="w-3.5 h-3.5" />
-            <span>Холбогдох</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </a>
+          {!authReady ? (
+            <div className="w-24 h-8 rounded-lg bg-slate-900 animate-pulse" />
+          ) : user ? (
+            <button
+              type="button"
+              onClick={signOutUser}
+              disabled={authLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-100 bg-slate-900 border border-slate-700 rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0 max-w-[180px]"
+              title="Системээс гарах"
+            >
+              <span className="truncate">{shortUserName}</span>
+              <LogOut className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={signInWithGoogle}
+              disabled={authLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-400 rounded-lg hover:bg-amber-300 transition-colors whitespace-nowrap shrink-0 shadow-sm shadow-amber-400/10"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>{authLoading ? 'Нэвтэрч байна...' : 'Нэвтрэх'}</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

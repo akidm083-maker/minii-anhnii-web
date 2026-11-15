@@ -1,9 +1,16 @@
-import { ArrowDown, Mail, ExternalLink, Gamepad2 } from 'lucide-react';
+import { ArrowDown, Mail, ExternalLink, Trophy } from 'lucide-react';
 import { PERSONAL_INFO } from '../data/works';
 
 export function Hero() {
   const scrollToWorks = () => {
     const el = document.getElementById('works-section');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const scrollToIdol = () => {
+    const el = document.getElementById('idol-section');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     }
@@ -76,6 +83,14 @@ export function Hero() {
                 <Mail className="w-4 h-4 text-amber-400" />
                 <span>И-мэйл бичих</span>
               </a>
+
+              <button
+                onClick={scrollToIdol}
+                className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-slate-200 bg-slate-900 border border-slate-700/80 rounded-lg hover:bg-slate-800 hover:text-amber-400 transition-colors"
+              >
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <span>Шүтээн: NiKo</span>
+              </button>
 
               <a
                 href="https://resilient-boba-83d2de.netlify.app/"

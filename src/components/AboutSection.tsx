@@ -1,4 +1,4 @@
-import { User, CheckCircle2, Gamepad2, Tv, Utensils, GraduationCap, Sparkles, BookOpen } from 'lucide-react';
+import { User, CheckCircle2, Gamepad2, Tv, Utensils, GraduationCap, Sparkles, Trophy } from 'lucide-react';
 import { PERSONAL_INFO, SKILL_CATEGORIES } from '../data/works';
 
 export function AboutSection() {
@@ -16,6 +16,12 @@ export function AboutSection() {
       icon: Gamepad2,
     },
     {
+      label: 'Миний Шүтээн (Idol)',
+      value: 'Nikola "NiKo" Kovač',
+      desc: 'CS2-ийн домогт rifler, миний үлгэр жишээ',
+      icon: Trophy,
+    },
+    {
       label: 'Дуртай аниме',
       value: PERSONAL_INFO.favoriteAnime,
       desc: 'Луффигийн адал явдал ба эрх чөлөө',
@@ -26,12 +32,6 @@ export function AboutSection() {
       value: PERSONAL_INFO.favoriteFood,
       desc: 'Хамгийн их амтархан иддэг',
       icon: Utensils,
-    },
-    {
-      label: 'Дуртай хамтлаг & Кино',
-      value: 'Одоогоор байхгүй',
-      desc: 'Тодорхой нэг хамтлаг, кино онцлоогүй',
-      icon: BookOpen,
     },
     {
       label: 'Сургалтад сурах шалтгаан',

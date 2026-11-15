@@ -1,9 +1,16 @@
-import { ArrowUp, Github, Mail } from 'lucide-react';
+import { ArrowUp, Github, Mail, Shield } from 'lucide-react';
 import { PERSONAL_INFO } from '../data/works';
 
 export function Footer() {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const scrollToAdmin = () => {
+    const element = document.getElementById('admin-section');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   return (
@@ -19,7 +26,16 @@ export function Footer() {
             </p>
           </div>
 
-          <div className="flex items-center gap-6 text-xs">
+          <div className="flex flex-wrap items-center justify-center gap-6 text-xs">
+            <button
+              type="button"
+              onClick={scrollToAdmin}
+              className="hover:text-amber-400 transition-colors flex items-center gap-1.5"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Админ самбар</span>
+            </button>
+
             <a
               href={`mailto:${PERSONAL_INFO.email}`}
               className="hover:text-amber-400 transition-colors flex items-center gap-1.5"
@@ -39,6 +55,7 @@ export function Footer() {
             </a>
 
             <button
+              type="button"
               onClick={scrollToTop}
               className="p-2 rounded-lg bg-slate-900 border border-slate-800 hover:text-white hover:bg-slate-800 transition-colors"
               title="Дээш очих"
