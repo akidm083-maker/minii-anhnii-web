@@ -9,12 +9,8 @@ export function WorksSection() {
 
   const categories = [
     { id: 'all', label: 'Бүх бүтээл' },
-    { id: 'web', label: 'Анхны вэб' },
-    { id: 'anime', label: 'One Piece' },
-    { id: 'gaming', label: 'CS2 Тоглоом' },
+    { id: 'web', label: 'Вэб төслүүд' },
     { id: 'photography', label: 'Гэрэл зураг' },
-    { id: 'study', label: 'Хичээл & Зорилго' },
-    { id: 'tech', label: 'Технологи' },
   ];
 
   // Filtering the single array of works
@@ -81,7 +77,7 @@ export function WorksSection() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Хайх (CS2, One Piece, HTML...)"
+              placeholder="Хайх (JavaScript, HTML, Гэрэл зураг...)"
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 transition-colors"
             />
             {searchQuery && (

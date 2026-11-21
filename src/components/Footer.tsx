@@ -1,16 +1,13 @@
 import { ArrowUp, Github, Mail, Shield } from 'lucide-react';
 import { PERSONAL_INFO } from '../data/works';
 
-export function Footer() {
+interface FooterProps {
+  onOpenAdmin: () => void;
+}
+
+export function Footer({ onOpenAdmin }: FooterProps) {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const scrollToAdmin = () => {
-    const element = document.getElementById('admin-section');
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
   };
 
   return (
@@ -29,11 +26,11 @@ export function Footer() {
           <div className="flex flex-wrap items-center justify-center gap-6 text-xs">
             <button
               type="button"
-              onClick={scrollToAdmin}
+              onClick={onOpenAdmin}
               className="hover:text-amber-400 transition-colors flex items-center gap-1.5"
             >
               <Shield className="w-3.5 h-3.5" />
-              <span>Админ самбар</span>
+              <span>Админ цэс</span>
             </button>
 
             <a

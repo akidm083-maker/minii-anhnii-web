@@ -10,6 +10,7 @@ import {
   CheckCheck,
   Trash2,
   Inbox,
+  MessageSquareShare,
 } from 'lucide-react';
 import {
   collection,
@@ -48,21 +49,45 @@ interface ContactMessageItem {
 export function ContactSection() {
   const { user, authReady, isAdmin, signInWithGoogle, authLoading, markQuotaExceeded } = useFirebase();
   const [copied, setCopied] = useState(false);
+  const [discordConfigured, setDiscordConfigured] = useState<boolean | null>(null);
   const [formState, setFormState] = useState({
     name: '',
+    contact: '',
     subject: '',
     message: '',
   });
   const [sending, setSending] = useState(false);
-  const [sentSuccess, setSentSuccess] = useState(false);
+  const [sentMessage, setSentMessage] = useState<string | null>(null);
   const [inboxMessages, setInboxMessages] = useState<ContactMessageItem[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
+  const [showMailFallback, setShowMailFallback] = useState(false);
 
   useEffect(() => {
-    if (user?.displayName && !formState.name) {
-      setFormState((prev) => ({ ...prev, name: user.displayName || '' }));
+    let active = true;
+    fetch('/api/discord-status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data && typeof data.configured === 'boolean') {
+          setDiscordConfigured(data.configured);
+        }
+      })
+      .catch(() => {
+        if (active) setDiscordConfigured(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      setFormState((prev) => ({
+        ...prev,
+        name: prev.name || user.displayName || '',
+        contact: prev.contact || user.email || '',
+      }));
     }
-  }, [user, formState.name]);
+  }, [user]);
 
   useEffect(() => {
     if (!authReady || !user || !user.emailVerified) {
@@ -121,11 +146,25 @@ export function ContactSection() {
     }
   };
 
+  const buildMailtoHref = () => {
+    const cleanName = formState.name.trim() || 'Зочин';
+    const cleanContact = formState.contact.trim();
+    const cleanSubject = formState.subject.trim() || 'Хамтран ажиллах санал';
+    const cleanMessage = formState.message.trim();
+    const contactLine = cleanContact ? `\nХолбоо барих: ${cleanContact}` : '';
+    return `mailto:${PERSONAL_INFO.email}?subject=${encodeURIComponent(
+      cleanSubject
+    )}&body=${encodeURIComponent(`Нэр: ${cleanName}${contactLine}\n\nЗурвас:\n${cleanMessage}`)}`;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setSentMessage(null);
+    setShowMailFallback(false);
 
     const cleanName = formState.name.trim().slice(0, 80);
+    const cleanContact = formState.contact.trim().slice(0, 120);
     const cleanSubject = (formState.subject.trim() || 'Хамтран ажиллах санал').slice(0, 120);
     const cleanMessage = formState.message.trim().slice(0, 1500);
 
@@ -134,48 +173,98 @@ export function ContactSection() {
       return;
     }
 
-    if (user && user.emailVerified) {
-      const messageId = generateValidDocId('msg');
-      const senderId = user.uid.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
-      const docPath = `contactMessages/${messageId}`;
-      setSending(true);
-      try {
-        await setDoc(doc(db, 'contactMessages', messageId), {
-          id: messageId,
-          senderId,
-          senderName: cleanName,
-          subject: cleanSubject,
-          message: cleanMessage,
-          status: 'new',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        setSentSuccess(true);
-        setFormState((prev) => ({ ...prev, subject: '', message: '' }));
-        setTimeout(() => setSentSuccess(false), 4000);
-      } catch (error) {
-        if (isQuotaExceededError(error)) {
-          markQuotaExceeded();
-          setFormError('Өнөөдрийн өгөгдлийн сангийн хязгаар дүүрсэн тул и-мэйл илгээх товчийг ашиглана уу.');
-          return;
+    setSending(true);
+    let savedToFirebase = false;
+    let firebaseQuotaBlocked = false;
+
+    try {
+      if (user && user.emailVerified) {
+        const messageId = generateValidDocId('msg');
+        const senderId = user.uid.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
+        const docPath = `contactMessages/${messageId}`;
+        const firestoreMessage = cleanContact
+          ? `${cleanMessage}\n\n[Холбоо барих: ${cleanContact}]`.slice(0, 1500)
+          : cleanMessage;
+
+        try {
+          await setDoc(doc(db, 'contactMessages', messageId), {
+            id: messageId,
+            senderId,
+            senderName: cleanName,
+            subject: cleanSubject,
+            message: firestoreMessage,
+            status: 'new',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          savedToFirebase = true;
+        } catch (error) {
+          if (isQuotaExceededError(error)) {
+            markQuotaExceeded();
+            firebaseQuotaBlocked = true;
+          } else {
+            handleFirestoreError(error, OperationType.CREATE, docPath);
+          }
         }
-        handleFirestoreError(error, OperationType.CREATE, docPath);
-      } finally {
-        setSending(false);
       }
-      return;
+
+      let sentToDiscord = false;
+      let discordErrorCode: string | null = null;
+      let discordErrorMsg: string | null = null;
+
+      try {
+        const res = await fetch('/api/contact-discord', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: cleanName,
+            contact: cleanContact || user?.email || '',
+            subject: cleanSubject,
+            message: cleanMessage,
+            savedToFirebase,
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.ok) {
+          sentToDiscord = true;
+          setDiscordConfigured(true);
+        } else {
+          discordErrorCode = data?.code || null;
+          discordErrorMsg = data?.error || null;
+          if (discordErrorCode === 'DISCORD_NOT_CONFIGURED') {
+            setDiscordConfigured(false);
+          }
+        }
+      } catch {
+        discordErrorMsg = 'Сервертэй холбогдож чадсангүй.';
+      }
+
+      if (sentToDiscord && savedToFirebase) {
+        setSentMessage('Таны санал Discord болон Firebase-д амжилттай илгээгдлээ!');
+        setFormState((prev) => ({ ...prev, subject: '', message: '' }));
+      } else if (sentToDiscord) {
+        setSentMessage('Таны хамтын ажиллагааны санал Discord руу амжилттай илгээгдлээ!');
+        setFormState((prev) => ({ ...prev, subject: '', message: '' }));
+      } else if (savedToFirebase) {
+        setSentMessage(
+          discordErrorCode === 'DISCORD_NOT_CONFIGURED'
+            ? 'Таны санал Firebase-д хадгалагдлаа! (Discord Webhook тохируулсны дараа шууд Discord-д очно)'
+            : 'Таны санал Firebase өгөгдлийн санд амжилттай хадгалагдлаа!'
+        );
+        setFormState((prev) => ({ ...prev, subject: '', message: '' }));
+      } else {
+        setShowMailFallback(true);
+        setFormError(
+          discordErrorCode === 'DISCORD_NOT_CONFIGURED'
+            ? 'Discord Webhook хараахан тохируулаагүй байна. Google-ээр нэвтэрч илгээх эсвэл доорх и-мэйл товчийг ашиглана уу.'
+            : firebaseQuotaBlocked
+              ? 'Өгөгдлийн сангийн хязгаар дүүрсэн байна. Доорх и-мэйл товчоор шууд илгээнэ үү.'
+              : discordErrorMsg || 'Зурвас илгээх үед алдаа гарлаа. И-мэйлээр илгээнэ үү.'
+        );
+      }
+    } finally {
+      setSending(false);
     }
-
-    const mailtoUrl = `mailto:${PERSONAL_INFO.email}?subject=${encodeURIComponent(
-      cleanSubject
-    )}&body=${encodeURIComponent(`Нэр: ${cleanName}\n\nЗурвас:\n${cleanMessage}`)}`;
-
-    window.location.href = mailtoUrl;
-    setSentSuccess(true);
-    setTimeout(() => {
-      setSentSuccess(false);
-      setFormState({ name: '', subject: '', message: '' });
-    }, 4000);
   };
 
   const handleMarkRead = async (msgId: string) => {
@@ -220,7 +309,7 @@ export function ContactSection() {
             Төсөл, хамтын ажиллагааны санал илгээх
           </h2>
           <p className="text-sm sm:text-base text-slate-400 max-w-2xl">
-            Шинэ веб төсөл, зөвлөгөө эсвэл хамтран ажиллах хүсэлт байвал шууд Firebase-ээр эсвэл и-мэйлээр холбогдоорой.
+            Шинэ веб төсөл, зөвлөгөө эсвэл хамтран ажиллах хүсэлтээ илгээвэл шууд Discord суваг руу (нэвтэрсэн бол Firebase-д давхар) хүрнэ.
           </p>
         </div>
 
@@ -270,7 +359,15 @@ export function ContactSection() {
                   <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
                   <span>{PERSONAL_INFO.location}</span>
                 </div>
-                <div className="text-slate-300">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <MessageSquareShare className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    {discordConfigured === true
+                      ? 'Discord шууд мэдэгдэл идэвхтэй'
+                      : 'Discord болон Firebase-ээр санал хүлээн авна'}
+                  </span>
+                </div>
+                <div className="text-slate-400">
                   {PERSONAL_INFO.status}
                 </div>
               </div>
@@ -285,7 +382,7 @@ export function ContactSection() {
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-base font-bold text-white">
-                  Зурвас илгээх
+                  Хамтын ажиллагааны санал илгээх
                 </h3>
                 {!user ? (
                   <button
@@ -295,11 +392,11 @@ export function ContactSection() {
                     className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors"
                   >
                     <LogIn className="w-3.5 h-3.5" />
-                    <span>Google-ээр нэвтэрч шууд хадгалах</span>
+                    <span>Google-ээр нэвтэрч давхар хадгалах</span>
                   </button>
                 ) : (
                   <span className="text-xs text-emerald-400 font-medium">
-                    Firebase-д шууд илгээх горим идэвхтэй
+                    Discord + Firebase хадгалалт идэвхтэй
                   </span>
                 )}
               </div>
@@ -324,16 +421,16 @@ export function ContactSection() {
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-slate-300">
-                    Сэдэв
+                    Discord / И-мэйл (Хариу авах)
                   </label>
                   <input
                     type="text"
                     maxLength={120}
-                    value={formState.subject}
+                    value={formState.contact}
                     onChange={(e) =>
-                      setFormState({ ...formState, subject: e.target.value })
+                      setFormState({ ...formState, contact: e.target.value })
                     }
-                    placeholder="Төслийн саналын сэдэв..."
+                    placeholder="Жишээ: @username эсвэл email"
                     className="w-full px-3.5 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-400 transition-colors"
                   />
                 </div>
@@ -341,7 +438,23 @@ export function ContactSection() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-300">
-                  Зурвас
+                  Саналын сэдэв
+                </label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  value={formState.subject}
+                  onChange={(e) =>
+                    setFormState({ ...formState, subject: e.target.value })
+                  }
+                  placeholder="Жишээ: Вэб төсөл дээр хамтран ажиллах, CS2 баг..."
+                  className="w-full px-3.5 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-400 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-300">
+                  Саналын дэлгэрэнгүй
                 </label>
                 <textarea
                   rows={4}
@@ -357,24 +470,31 @@ export function ContactSection() {
               </div>
 
               {formError && (
-                <p className="text-xs text-rose-400">{formError}</p>
+                <div className="space-y-2">
+                  <p className="text-xs text-rose-400">{formError}</p>
+                  {showMailFallback && (
+                    <a
+                      href={buildMailtoHref()}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400 hover:text-amber-300 underline underline-offset-4"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>И-мэйл програмаар илгээх</span>
+                    </a>
+                  )}
+                </div>
               )}
 
               <div className="pt-2 flex flex-wrap items-center justify-between gap-3">
-                {sentSuccess ? (
+                {sentMessage ? (
                   <span className="text-xs font-medium text-emerald-400 flex items-center gap-1.5">
-                    <Check className="w-4 h-4" />
-                    <span>
-                      {user
-                        ? 'Таны зурвас Firebase өгөгдлийн санд амжилттай хадгалагдлаа!'
-                        : 'Зурвас бэлтгэгдэж таны и-мэйл програм дээр нээгдлээ.'}
-                    </span>
+                    <Check className="w-4 h-4 shrink-0" />
+                    <span>{sentMessage}</span>
                   </span>
                 ) : (
                   <span className="text-[11px] text-slate-500">
                     {user
-                      ? 'Илгээсэн зурвасыг зөвхөн та болон Chingis харах боломжтой.'
-                      : 'Нэвтрээгүй бол таны и-мэйл хэрэгслээр дамжин илгээгдэнэ.'}
+                      ? 'Discord руу мэдэгдэж, Firebase-д аюулгүй хадгална.'
+                      : 'Шууд Discord суваг руу илгээгдэнэ.'}
                   </span>
                 )}
 
@@ -384,7 +504,7 @@ export function ContactSection() {
                   className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shrink-0 disabled:opacity-50"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>{sending ? 'Илгээж байна...' : 'Зурвас илгээх'}</span>
+                  <span>{sending ? 'Илгээж байна...' : 'Discord руу илгээх'}</span>
                 </button>
               </div>
             </form>
